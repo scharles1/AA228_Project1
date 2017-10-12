@@ -1,4 +1,5 @@
 using LightGraphs
+using DataFrames
 
 """
     write_gph(dag::DiGraph, idx2names, filename)
@@ -14,11 +15,17 @@ function write_gph(dag::DiGraph, idx2names, filename)
 end
 
 function compute(infile, outfile)
-    
-    # WRITE YOUR CODE HERE
-    # FEEL FREE TO CHANGE ANYTHING ANYWHERE IN THE CODE
-    # THIS INCLUDES CHANGING THE FUNCTION NAMES, MAKING THE CODE MODULAR, BASICALLY ANYTHING
-    
+    data = readtable(infile)
+    idx2names = get_dict(data)
+    #
+    #@printf(io, infile)
+end
+
+function get_dic(data)
+    names = names(data)
+    l = length(names)
+    keys = 1:l
+    return Dict(keys[i]=>names[i] for i = 1:1:l)
 end
 
 if length(ARGS) != 2
