@@ -22,8 +22,8 @@ end
 ############################################################
 function compute(infile::String, outfile::String)
     data = readtable(infile)
-    i2names = get_dict(data)
-    graphs2search = possibleGraphs(10)
+    i2names = getDict(data)
+    graphs2search = possibleGraphs(8)
     for g in graphs2search
        for e in edges(g)
            show(e)
@@ -34,11 +34,11 @@ function compute(infile::String, outfile::String)
 end
 
 ############################################################
-# Function: get_dic(data)
+# Function: getDict(data)
 #
 # Description: 
 ############################################################
-function get_dict(data::DataFrames.DataFrame)
+function getDict(data::DataFrame)
     Names = names(data)
     l = length(Names)
     keys = 1:l
@@ -46,53 +46,10 @@ function get_dict(data::DataFrames.DataFrame)
 end
 
 ############################################################
-# Function: possibleGraphs(data)
+# Function: k2Search(data)
 #
 # Description: 
 ############################################################
-function possibleGraphs(nVertices::Integer)
-    graphs2Search = Vector{DiGraph}()
-    queue = Vector{DiGraph}()
-    unshift!(graphs2Search, DiGraph(nVertices))
-    unshift!(queue, DiGraph(nVertices))
-    
-    while(!isempty(queue))
-        curr = pop!(queue)
-        if (!hasMarkovEquivalent(curr, graphs2Search))
-            unshift!(graphs2Search, copy(curr))
-        end
-        while(addRandEdge(curr))
-           unshift!(queue,copy(curr)) 
-        end
-    end
-    return graphs2Search
-end
-        
-############################################################
-# Function: addRandEdge(g::DiGraph)
-#
-# Description: "Randomly" adds a new directed edge to the
-# the graph. Returns true if it was able to. Otherwise,
-# it returns false.
-############################################################
-function addRandEdge(g::DiGraph)
-    for i = 1:nv(g)
-        for j = 1:nv(g)
-            if i == j
-                continue
-            elseif has_edge(g, Edge(j,i))
-                continue
-            elseif add_edge!(g,i,j)
-                if has_self_loops(g)
-                    rem_edge!(g,i,j)
-                else
-                    return true
-                end
-            end
-        end
-    end
-    return false
-end
 
 ############################################################
 # Function: hasMarkovEquivalent(g1::DiGraph, v::Vector{Digraph}
@@ -136,10 +93,61 @@ function markovEquivalent(g1::DiGraph, g2::DiGraph)
     return true
 end
 
+############################################################
+# Function: bayesianScore(g1::DiGraph, g2::Digraph)
+#
+# Description: 
+############################################################
+function bayesianScore(g1::DiGraph, data::DataFrame) 
+    #assume uniform prior with pseudocounts 1
+    for n = vertices(g1)
+        parents = getParents(g1, n)
+        for parent in parents
+            nInstances = maximum(data[parent])
+            for q = 1:nInstances
+                score += lgamma()
+            end
+        end
+    end
+end
+
+############################################################
+# Function: getParents(g::DiGraph, child::Integer)
+#
+# Description: 
+############################################################
+function getParents(g::DiGraph, child::Integer)
+    parents = Vector{Integer}()
+    for e = edges(g)
+        if (dst(e) == child)
+           push!(parents, src(e)) 
+        end
+    end
+    return parents
+end
+
+############################################################
+# Function: getAlpha(data::DataFrame, parents::Vector{Integer})
+#
+# Description: 
+############################################################
+function getAlpha(data::DataFrame, i::Integer, j::Integer, k::Integer)
+    
+end
+
 #if length(ARGS) != 2
 #    error("usage: julia project1.jl <infile>.csv <outfile>.gph")
 #end
 
 inputfilename = "small.csv"#ARGS[1]
 outputfilename = "short.gph"#ARGS[2]
-compute(inputfilename, outputfilename)
+#compute(inputfilename, outputfilename)
+g = DiGraph(5)
+add_edge!(g,1,2)
+add_edge!(g,1,3)
+#add_edge!(g,1,4)
+add_edge!(g,2,4)
+add_edge!(g,3,4)
+add_edge!(g,2,3)
+data = readtable("small.csv")
+numInstances(data,1)
