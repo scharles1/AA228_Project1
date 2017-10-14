@@ -23,14 +23,16 @@ end
 function compute(infile::String, outfile::String)
     data = readtable(infile)
     i2names = getDict(data)
-    graphs2search = possibleGraphs(8)
-    for g in graphs2search
-       for e in edges(g)
-           show(e)
-        end
-        @printf("\n\n")
-    end
-    show(length(graphs2search))
+    g1 = DiGraph(8)
+    add_edge!(g1,4,2)
+    add_edge!(g1,3,2)
+    add_edge!(g1,1,2)
+    add_edge!(g1,5,2)
+    add_edge!(g1,6,2)
+    add_edge!(g1,7,2)
+    add_edge!(g1,8,2)
+    score= bayesianScore(g1, data)
+    show(score)
 end
 
 ############################################################
@@ -98,17 +100,97 @@ end
 #
 # Description: 
 ############################################################
-function bayesianScore(g1::DiGraph, data::DataFrame) 
+function bayesianScore(g::DiGraph, data::DataFrame) 
     #assume uniform prior with pseudocounts 1
-    for n = vertices(g1)
-        parents = getParents(g1, n)
-        for parent in parents
-            nInstances = maximum(data[parent])
-            for q = 1:nInstances
-                score += lgamma()
+    score = 0.0
+    for i = vertices(g)
+        qTable = getQTable(g, i, data)
+        parents = shift!(qTable)
+        score += bayesianScoreComponent(data, i, parents, qTable)
+    end
+    return score
+end
+
+function bayesianScoreComponent(data::DataFrame, 
+                                node::Integer,
+                                parents::Vector{Integer},
+                                qTable::Vector{Vector{Integer}})
+    subscore = 0.0
+    nCInstances = maximum(data[node])
+    nPInstances = length(qTable)
+    if(nPInstances == 0)
+        subscore += lgamma(nCInstances)
+        subscore -= lgamma(nCInstances + length(data[node]))
+
+        for k = 1:nCInstances
+            subscore += lgamma(1 + length(find(x->x == k, data[node])))
+        end
+    else
+        for j = 1:nPInstances
+            subscore += lgamma(nCInstances)
+            subscore -= lgamma(nCInstances + getM(data, node, j, 0, parents, qTable))
+            for k = 1:nCInstances
+                subscore += lgamma(1 + getM(data, node, j, k, parents, qTable))
             end
         end
     end
+    return subscore
+end
+
+function getM(data::DataFrame,
+              i::Integer,
+              j::Integer, 
+              k::Integer,
+              parents::Vector{Integer},
+              qTable::Vector{Vector{Integer}})
+    counts = 1:size(data)[1]
+    for i = 1:length(parents)
+        counts = intersect(counts, find(m->m == qTable[j][i], data[parents[i]]))
+    end
+    if k == 0
+        return length(counts)
+    else
+        return length(intersect(counts, find(m->m == k, data[i])))
+    end
+end
+
+
+############################################################
+# Function: getQTable(g::DiGraph, child::Integer)
+#
+# Description: Extra recursive definition
+############################################################
+function getQTable(g::DiGraph, child::Integer, data::DataFrame)
+    parents = getParents(g, child)
+    parentInstances = Vector{Vector{Integer}}()
+    for parent in parents
+        parentInstance = Vector{Integer}(2)
+        parentInstance[1] = parent
+        parentInstance[2] = maximum(data[parent])
+        push!(parentInstances, parentInstance)
+    end
+    table = Vector{Vector{Integer}}()
+    qi = Vector{Integer}()
+    getQTable(table, parentInstances, qi)
+    unshift!(table, parents)
+    return table
+end
+
+function getQTable( table::Vector{Vector{Integer}},
+                    pInstances::Vector{Vector{Integer}},
+                    qi::Vector{Integer})
+    if(isempty(pInstances))
+        push!(table, copy(qi))
+        return
+    end
+    currInstance = shift!(pInstances)
+    for i = 1:currInstance[2]
+        push!(qi, i)
+        getQTable( table, pInstances, qi)
+        pop!(qi)
+    end
+    unshift!(pInstances, currInstance)
+    return
 end
 
 ############################################################
@@ -126,28 +208,6 @@ function getParents(g::DiGraph, child::Integer)
     return parents
 end
 
-############################################################
-# Function: getAlpha(data::DataFrame, parents::Vector{Integer})
-#
-# Description: 
-############################################################
-function getAlpha(data::DataFrame, i::Integer, j::Integer, k::Integer)
-    
-end
-
-#if length(ARGS) != 2
-#    error("usage: julia project1.jl <infile>.csv <outfile>.gph")
-#end
-
 inputfilename = "small.csv"#ARGS[1]
 outputfilename = "short.gph"#ARGS[2]
-#compute(inputfilename, outputfilename)
-g = DiGraph(5)
-add_edge!(g,1,2)
-add_edge!(g,1,3)
-#add_edge!(g,1,4)
-add_edge!(g,2,4)
-add_edge!(g,3,4)
-add_edge!(g,2,3)
-data = readtable("small.csv")
-numInstances(data,1)
+compute(inputfilename, outputfilename)
