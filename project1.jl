@@ -25,9 +25,13 @@ end
 function compute(infile::String, outfile::String)
     data = readtable(infile)
     i2names = getDict(data)
-    g1 = DiGraph(50)
-    #runK2Search(g1, data)
-    show(g1)
+    g1 = DiGraph(8)
+    #g2 = runSethSearch(g1, data)
+    add_edge!(g1, 1, 5)
+    add_edge!(g1, 1, 7)
+    add_edge!(g1, 7, 5)
+    add_edge!(g1, 8, 5)
+    show(bayesianScore(g1, data))
     #write_gph(g1, i2names, outfile)
 end
 
@@ -49,7 +53,7 @@ end
 # Description: 
 ############################################################
 function runK2Search(g::DiGraph, data::DataFrame)
-    bestScore = -1000000;
+    bestScore = -100000000;
     n = nv(g)
     for v = vertices(g)
         currScore = bayesianScore(g, data)
@@ -79,38 +83,50 @@ function runK2Search(g::DiGraph, data::DataFrame)
 end
 
 ############################################################
-# Function: k2Search(data)
+# Function: runSethSearch(data)
 #
 # Description: 
 ############################################################
 function runSethSearch(g::DiGraph, data::DataFrame)
-    bestScore = -1000000;
-    pQueue = 
-    for v = vertices(g)
-        currScore = bayesianScore(g, data)
-        prevScore = currScore - 1
-        i = 0
-        while(currScore > prevScore)
-            i += 1
-            add_edge!(g, ((v + i) % n) + 1, v)
-            if has_self_loops(g)
-                rem_edge!(g, ((v + i) % n) + 1, v)
+    bestScore = -100000000;
+    pQ = PriorityQueue(Base.Order.Reverse)
+    enqueue!(pQ, copy(g), -1.0)
+    n = nv(g)
+
+    while (!isempty(pQ))
+        currG = dequeue!(pQ)
+        node = rand(1:n)
+        for v in vertices(g)
+            if(v == node)
                 continue
             end
-            prevScore = currScore
-            currScore = bayesianScore(g, data)
+            e = Edge(node, v)
+            if has_edge(currG,e) || has_edge(currG,reverse(e))
+                continue
+            end
+            if !(add_edge!(currG, node, v))
+                continue
+            end
+            if has_self_loops(currG)
+                rem_edge!(currG, node, v)
+                continue
+            end
+            currScore = bayesianScore(currG, data)
             if(currScore > bestScore)
+                bestGraph = copy(currG)
                 bestScore = currScore
-                for edge in edges(g)
+                show(bestScore)
+                @printf("\n")
+                for edge in edges(currG)
                     show(edge)
                     @printf("\n")
                 end
             end
-            show(currScore)
-            @printf("\n\n")
+            enqueue!(pQ, copy(currG), currScore)
+            printf("length of pq: %d\n", length(pq))
         end
-        rem_edge!(g, ((v + i) % n) + 1, v)
     end
+    return bestGraph
 end
 
 ############################################################
@@ -187,8 +203,8 @@ function bayesianScoreComponent(data::DataFrame,
         end
     else
         for j = 1:nPInstances
-            subscore += lgamma(nCInstances)
-            subscore -= lgamma(nCInstances + getM(data, node, j, 0, parents, qTable))
+            subscore += lgamma(size(qTable)[1])
+            subscore -= lgamma(size(qTable)[1] + getM(data, node, j, 0, parents, qTable))
             for k = 1:nCInstances
                 subscore += lgamma(1 + getM(data, node, j, k, parents, qTable))
             end
@@ -268,6 +284,6 @@ function getParents(g::DiGraph, child::Integer)
     return parents
 end
 
-inputfilename = "large.csv"#ARGS[1]
-outputfilename = "large.gph"#ARGS[2]
+inputfilename = "small.csv"#ARGS[1]
+outputfilename = "small.gph"#ARGS[2]
 compute(inputfilename, outputfilename)
