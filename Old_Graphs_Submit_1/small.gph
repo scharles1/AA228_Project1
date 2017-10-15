@@ -1,0 +1,4 @@
+age, passengerclass
+age, numsiblings
+numsiblings, passengerclass
+survived, passengerclass
