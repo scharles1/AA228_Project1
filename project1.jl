@@ -1,5 +1,7 @@
 using LightGraphs
 using DataFrames
+using BayesNets
+using DataStructures
 
 ############################################################
 # Function: write_gph(dag::DiGraph, idx2names, filename)
@@ -23,16 +25,10 @@ end
 function compute(infile::String, outfile::String)
     data = readtable(infile)
     i2names = getDict(data)
-    g1 = DiGraph(8)
-    add_edge!(g1,4,2)
-    add_edge!(g1,3,2)
-    add_edge!(g1,1,2)
-    add_edge!(g1,5,2)
-    add_edge!(g1,6,2)
-    add_edge!(g1,7,2)
-    add_edge!(g1,8,2)
-    score= bayesianScore(g1, data)
-    show(score)
+    g1 = DiGraph(50)
+    #runK2Search(g1, data)
+    show(g1)
+    #write_gph(g1, i2names, outfile)
 end
 
 ############################################################
@@ -52,6 +48,70 @@ end
 #
 # Description: 
 ############################################################
+function runK2Search(g::DiGraph, data::DataFrame)
+    bestScore = -1000000;
+    n = nv(g)
+    for v = vertices(g)
+        currScore = bayesianScore(g, data)
+        prevScore = currScore - 1
+        i = 0
+        while(currScore > prevScore)
+            i += 1
+            add_edge!(g, ((v + i) % n) + 1, v)
+            if has_self_loops(g)
+                rem_edge!(g, ((v + i) % n) + 1, v)
+                continue
+            end
+            prevScore = currScore
+            currScore = bayesianScore(g, data)
+            if(currScore > bestScore)
+                bestScore = currScore
+                for edge in edges(g)
+                    show(edge)
+                    @printf("\n")
+                end
+            end
+            show(currScore)
+            @printf("\n\n")
+        end
+        rem_edge!(g, ((v + i) % n) + 1, v)
+    end
+end
+
+############################################################
+# Function: k2Search(data)
+#
+# Description: 
+############################################################
+function runSethSearch(g::DiGraph, data::DataFrame)
+    bestScore = -1000000;
+    pQueue = 
+    for v = vertices(g)
+        currScore = bayesianScore(g, data)
+        prevScore = currScore - 1
+        i = 0
+        while(currScore > prevScore)
+            i += 1
+            add_edge!(g, ((v + i) % n) + 1, v)
+            if has_self_loops(g)
+                rem_edge!(g, ((v + i) % n) + 1, v)
+                continue
+            end
+            prevScore = currScore
+            currScore = bayesianScore(g, data)
+            if(currScore > bestScore)
+                bestScore = currScore
+                for edge in edges(g)
+                    show(edge)
+                    @printf("\n")
+                end
+            end
+            show(currScore)
+            @printf("\n\n")
+        end
+        rem_edge!(g, ((v + i) % n) + 1, v)
+    end
+end
 
 ############################################################
 # Function: hasMarkovEquivalent(g1::DiGraph, v::Vector{Digraph}
@@ -208,6 +268,6 @@ function getParents(g::DiGraph, child::Integer)
     return parents
 end
 
-inputfilename = "small.csv"#ARGS[1]
-outputfilename = "short.gph"#ARGS[2]
+inputfilename = "large.csv"#ARGS[1]
+outputfilename = "large.gph"#ARGS[2]
 compute(inputfilename, outputfilename)
