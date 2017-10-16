@@ -1,9 +1,0 @@
-fixedacidity, alcohol
-volatileacidity, quality
-citricacid, fixedacidity
-citricacid, quality
-residualsugar, volatileacidity
-chlorides, citricacid
-ph, totalsulfurdioxide
-alcohol, ph
-quality, sulphates
