@@ -5,14 +5,9 @@ using DataStructures
 ############################################################
 # Module Variables
 ############################################################
-inputfilename = "large.csv"#ARGS[1]
-outputfilename = "large.gph"#ARGS[2]
-nNodes = 50
-data = readtable(inputfilename)
-nInstances = Array([maximum(data[i]) for i = 1:nNodes])
-QTable = Dict(i=>Vector{Vector{Integer}}() for i = 1:nNodes)
-parents = Dict(i=>Vector{Integer}() for i = 1:nNodes)
-data = readtable(inputfilename)
+inputfilename = "medium.csv"#ARGS[1]
+outputfilename = "medium.gph"#ARGS[2]
+nNodes = 12
     
 ############################################################
 # Function: write_gph(dag::DiGraph, idx2names, filename)
@@ -34,15 +29,19 @@ end
 # Description:
 ############################################################
 function compute(infile::String, outfile::String)
+    data = readtable(infile)
     i2names = getDict(data)
+    nInstances = Array{Int64}([maximum(data[i]) for i = 1:nNodes])
+    QTable = Array{Vector{Vector{Int64}}}([Vector{Vector{Int64}}() for i = 1:nNodes])
+    parents = Array{Vector{Int64}}([Vector{Int64}() for i = 1:nNodes])
     g1 = DiGraph(nNodes)    
-    bestScore = runRandomK2Search(g1, i2names, -10000000000.0)
+    bestScore = runK2Search(g1, i2names, -10000000000.0, parents, QTable, data, nInstances)
 
     while(bestScore < -3795)
         @printf("Restarting search\n")
         while !remEdge(g1, Edge(rand(1:nv(g1)), rand(1:nv(g1))))
         end
-        bestScore = runRandomK2Search(g1, i2names, bestScore)
+        bestScore = runK2Search(g1, i2names, bestScore, parents, QTable, data, nInstances)
     end
     #runK2Search(g1, data)
     write_gph(g1, i2names, outfile)
@@ -58,6 +57,41 @@ function getDict(data::DataFrame)
     l = length(Names)
     keys = 1:l
     return Dict(keys[i]=>Names[i] for i = 1:l)
+end
+
+############################################################
+# Function: k2Search(data)
+#
+# Description: 
+############################################################
+function runK2Search(g::DiGraph, i2names::Dict, bestScore::Float64, parents::Array{Vector{Int64}}, QTable::Array{Vector{Vector{Int64}}}, data::DataFrame, nInstances::Array{Int64})
+    n = nv(g)
+    for v = vertices(g)
+        currScore = bayesianScore(g, parents, QTable, data, nInstances)
+        prevScore = currScore - 1
+        i = 0
+        while(currScore > prevScore)
+            i += 1
+            e = Edge(((v + i) % n) + 1, v)
+            addEdge(g, e, parents, nInstances, QTable)
+            if is_cyclic(g)
+                remEdge(g,e, parents, nInstances, QTable)
+                continue
+            end
+            prevScore = currScore
+            currScore = bayesianScore(g, parents, QTable, data, nInstances)
+            @printf("CurrScore: %d\n", currScore)
+            if(currScore > bestScore)
+                bestScore = currScore
+                @printf("New Best Score: %d\n", bestScore)                
+                for edge in edges(g)
+                    @printf("%s, %s\n", i2names[src(edge)], i2names[dst(edge)])
+                end
+                @printf("\n")
+            end
+        end
+    end
+    return bestScore
 end
 
 ############################################################
@@ -202,17 +236,17 @@ end
 # Description: Utilizes the bayesianScoreCompenent and 
 #              the getM function
 ############################################################
-function bayesianScore(g::DiGraph) 
+function bayesianScore(g::DiGraph, parents::Array{Vector{Int64}}, QTable::Array{Vector{Vector{Int64}}}, data::DataFrame, nInstances::Array{Int64}) 
     #assume uniform prior with pseudocounts 1
     score = 0.0
     for i = vertices(g)
-        score += bayesianScoreComponent(i)
+        score += bayesianScoreComponent(i, parents, QTable, data, nInstances)
     end
     return score
 end
 
 ############################################################
-function bayesianScoreComponent(i::Integer)
+function bayesianScoreComponent(i::Int64, parents::Array{Vector{Int64}}, QTable::Array{Vector{Vector{Int64}}}, data::DataFrame, nInstances::Array{Int64})
     subscore = 0.0
     nCInstances = nInstances[i]
     nPInstances = length(QTable[i])
@@ -226,9 +260,9 @@ function bayesianScoreComponent(i::Integer)
     else
         for j = 1:nPInstances
             subscore += lgamma(nCInstances)
-            subscore -= lgamma(nCInstances + getM(i, j, 0))
+            subscore -= lgamma(nCInstances + getM(i, j, 0, parents, QTable, data))
             for k = 1:nCInstances
-                subscore += lgamma(1 + getM(i, j, k))
+                subscore += lgamma(1 + getM(i, j, k, parents, QTable, data))
             end
         end
     end
@@ -236,7 +270,7 @@ function bayesianScoreComponent(i::Integer)
 end
 
 ############################################################
-function getM(i::Integer, j::Integer, k::Integer)
+function getM(i::Int64, j::Int64, k::Int64, parents::Array{Vector{Int64}}, QTable::Array{Vector{Vector{Int64}}}, data::DataFrame)
     counts = 1:size(data)[1]
     for n = 1:length(parents[i])
         counts = intersect(counts, find(m->m == QTable[i][j][n], data[parents[i][n]]))
@@ -253,28 +287,25 @@ end
 #
 # Description: Extra recursive definition
 ############################################################
-function updateQTable(child::Integer)
-    global parents
-    global nInstances
-    global QTable
+function updateQTable(child::Int64, parents::Array{Vector{Int64}}, nInstances::Array{Int64}, QTable::Array{Vector{Vector{Int64}}})
     ps = parents[child]
-    parentInstances = Vector{Vector{Integer}}()
+    parentInstances = Vector{Vector{Int64}}()
     for p in ps
-        parentInstance = Vector{Integer}(2)
+        parentInstance = Vector{Int64}(2)
         parentInstance[1] = p
         parentInstance[2] = nInstances[p]
         push!(parentInstances, parentInstance)
     end
-    table = Vector{Vector{Integer}}()
-    qi = Vector{Integer}()
+    table = Vector{Vector{Int64}}()
+    qi = Vector{Int64}()
     updateQTable(table, parentInstances, qi)
     QTable[child] = table
 end
 
 ############################################################
-function updateQTable( table::Vector{Vector{Integer}},
-                                           pInstances::Vector{Vector{Integer}},
-                                           qi::Vector{Integer})
+function updateQTable( table::Vector{Vector{Int64}},
+                                           pInstances::Vector{Vector{Int64}},
+                                           qi::Vector{Int64})
     if(isempty(pInstances))
         push!(table, copy(qi))
         return
@@ -294,14 +325,13 @@ end
 #
 # Description: 
 ############################################################
-function addEdge(g::DiGraph, e::Edge)
-    global parents
+function addEdge(g::DiGraph, e::Edge, parents::Array{Vector{Int64}}, nInstances::Array{Int64}, QTable::Array{Vector{Vector{Int64}}})
     if !add_edge!(g, e)
         return false
     end
     p = parents[dst(e)]
     push!(p, src(e))
-    updateQTable(dst(e))
+    updateQTable(dst(e), parents, nInstances, QTable)
     return true
 end
 
@@ -310,13 +340,13 @@ end
 #
 # Description: 
 ############################################################
-function remEdge(g::DiGraph, e::Edge)
+function remEdge(g::DiGraph, e::Edge, parents::Array{Vector{Int64}}, nInstances::Array{Int64}, QTable::Array{Vector{Vector{Int64}}})
     if !rem_edge!(g, e)
         return false
     end
     p = parents[dst(e)]
     deleteat!(p, find(x->x == src(e), p))
-    updateQTable(dst(e))
+    updateQTable(dst(e), parents, nInstances, QTable)
     return true
 end
 
